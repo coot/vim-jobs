@@ -43,7 +43,7 @@ fun! s:ListJobs()
   endfor
 endfun
 
-fun! s:LogJob(bang, name)
+fun! s:LogJob(bang, lines, name)
   if a:name =~ '^\s*-\?\s*\d\+\s*$'
     let job = s:jobs[max([0, min([str2nr(a:name), len(s:jobs) - 1])])]
   elseif len(a:name)
@@ -67,7 +67,8 @@ fun! s:LogJob(bang, name)
     return
   endif
 
-  echo join(get(job, "log", []), "\n")
+  let log_list = get(job, "log", [])
+  echo join(a:lines == 0 ? log_list : log_list[max([0,len(log_list) - a:lines]):], "\n")
   if a:bang == "!"
     let job["log"] = []
   endif
@@ -76,4 +77,4 @@ endfun
 command! -nargs=+ -bang -complete=shellcmd Job call s:Job('<bang>', '<args>')
 command! -count=99999 HaltJob call job_stop(remove(s:jobs, '<count>' == 99999 ? len(s:jobs) - 1 : '<count>')["job"])
 command! ListJobs call s:ListJobs()
-command! -nargs=* -bang LogJob call s:LogJob('<bang>', '<args>')
+command! -nargs=* -bang -range=0 LogJob call s:LogJob('<bang>', '<line1>', '<args>')
