@@ -4,34 +4,49 @@ if (!exists("s:jobs"))
   let s:jobs = []
 endif
 
-fun! s:ExitJob(job, exitStatus)
-    echomsg a:job . " exited with " . a:exitStatus
+fun! s:SilentExitJob(job, exitStatus)
     let s:jobs = filter(s:jobs, {key, val -> val["job"] != a:job})
 endfun
 
-fun! JobLogHandler(ch, msg)
+fun! s:ExitJob(job, exitStatus)
+    echomsg a:job . " exited with " . a:exitStatus
+    call s:SilentExitJob(a:job, a:exitStatus)
+endfun
+
+fun! GetJob(ch)
   let jobs = filter(copy(s:jobs), {key, val -> val["job"] == ch_getjob(a:ch)})
-  if (len(jobs) != 1)
-    echoerr "JobLogHandler: found " . len(jobs)
+  if len(jobs)
+    return jobs[0]
+  else
+    return v:none
+  endif
+endfun
+
+fun! LogJobHandler(ch, msg)
+  let job = GetJob(a:ch)
+  if (type(job) != v:t_dict)
     return
   endif
-  let log = get(jobs[0], "log", [])
-  if !has_key(jobs[0], "log")
-    let jobs[0]["log"] = log
-  endif
+  let log = get(job, "log", [])
   call add(log, substitute(a:msg, '[\d\+\w', "", "g")) 
 endfun
 
-fun! s:Job(bang, cmd)
+fun! Job(cmd, ...)
   " vim checks if job finished every 10seconds, that's a bit long, but that's
   " the simplest solution for now
-  let opts = {"exit_cb": function("s:ExitJob")}
-  if a:bang != "!"
-    let opts["out_cb"] = "JobLogHandler"
-    let opts["err_cb"] = "JobLogHandler"
+  if a:0 && a:1 && !exists("*" . a:1)
+    echoerr "E700: Unknown function: " . a:1
+    return
+  endif
+  let opts = {}
+  let inASilentWay = !(!a:0 || a:0 >= 1 && len(a:1)) " ;)
+  let opts["exit_cb"] = !inASilentWay ? function("s:ExitJob") : function("s:SilentExitJob")
+  if !inASilentWay
+    let opts["out_cb"] = a:0 ? a:1 : "LogJobHandler"
+    let opts["err_cb"] = a:0 ? a:1 : "LogJobHandler"
   endif
   let job = job_start(["sh", "-c", a:cmd], opts)
-  call add(s:jobs, {"job": job, "cmd": a:cmd})
+  call add(s:jobs, {"job": job, "cmd": a:cmd, "log": []})
 endfun
 
 fun! s:ListJobs()
@@ -74,7 +89,28 @@ fun! s:LogJob(bang, lines, name)
   endif
 endfun
 
-command! -nargs=+ -bang -complete=shellcmd Job call s:Job('<bang>', '<args>')
-command! -count=99999 HaltJob call job_stop(remove(s:jobs, '<count>' == 99999 ? len(s:jobs) - 1 : '<count>')["job"])
+fun! s:HaltJobs(line1, line2, count)
+  let jobsLen = len(s:jobs)
+  if (jobsLen == 0)
+    return
+  endif
+
+  if (a:line1 == 1 && a:count == 99999)
+    let start = jobsLen - 1
+    let stop = start
+  else
+    let start = max([0, a:line1])
+    let stop = min([a:line2, jobsLen - 1])
+  endif
+  if (stop < start)
+    let [start, stop] = [stop, start]
+  endif
+  for job in remove(s:jobs, start, stop)
+    call job_stop(job["job"])
+  endfor
+endfun
+
+command! -nargs=+ -bang -complete=shellcmd Job call Job('<args>', '<bang>' != '!' ? "LogJobHandler" : "")
+command! -count=99999 HaltJob call s:HaltJobs('<line1>', '<line2>', '<count>')
 command! ListJobs call s:ListJobs()
 command! -nargs=* -bang -range=0 LogJob call s:LogJob('<bang>', '<line1>', '<args>')
