@@ -95,7 +95,7 @@ fun! s:HaltJobs(line1, line2, count)
     return
   endif
 
-  if (a:line1 == 1 && a:count == 99999)
+  if (a:count == 99999)
     let start = jobsLen - 1
     let stop = start
   else
