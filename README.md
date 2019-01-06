@@ -1,6 +1,6 @@
 # Vim plugin to run and manage async jobs
 
-It's depreciated, use (vim-term)[https://github.com/coot/vim-term].
+It's **depreciated**, use [vim-term](https://github.com/coot/vim-term).
 
 ```viml
 :Job cmd
